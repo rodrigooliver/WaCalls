@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 
 	"go.mau.fi/whatsmeow/types"
 )
+
+var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,80}$`)
 
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
@@ -95,6 +98,7 @@ func (s *server) handleSessionList(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
+		ID            string `json:"id"`
 		Name          string `json:"name"`
 		WebhookURL    string `json:"webhook_url"`
 		WebhookSecret string `json:"webhook_secret"`
@@ -104,12 +108,17 @@ func (s *server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = "Session"
 	}
+	id := strings.TrimSpace(body.ID)
+	if id != "" && !sessionIDPattern.MatchString(id) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid session id"})
+		return
+	}
 	webhookURL := strings.TrimSpace(body.WebhookURL)
 	if webhookURL != "" && !strings.HasPrefix(webhookURL, "https://") && !strings.HasPrefix(webhookURL, "http://") {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "webhook_url must be http or https"})
 		return
 	}
-	id, err := s.sessions.Create(name, webhookURL, body.WebhookSecret)
+	id, err := s.sessions.Create(id, name, webhookURL, body.WebhookSecret)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

@@ -119,8 +119,10 @@ func (m *SessionManager) Restore(ctx context.Context) error {
 	return nil
 }
 
-func (m *SessionManager) Create(name, webhookURL, webhookSecret string) (string, error) {
-	id := newSessionID()
+func (m *SessionManager) Create(id, name, webhookURL, webhookSecret string) (string, error) {
+	if id == "" {
+		id = newSessionID()
+	}
 	if err := m.store.insert(m.appCtx, id, name, webhookURL, webhookSecret); err != nil {
 		return "", err
 	}
