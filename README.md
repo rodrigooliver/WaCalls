@@ -11,7 +11,7 @@ Built for native VoIP media, multi-account (multi-session) operation, and a mode
 [![pion](https://img.shields.io/badge/pion-WebRTC-FF6B6B)](https://github.com/pion/webrtc)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 
-[Overview](#overview) · [Architecture](#architecture) · [Quick Start](#quick-start) · [API](#api) · [Security](#security)
+[Overview](#overview) · [Architecture](#architecture) · [Quick Start](#quick-start) · [Coolify](#coolify) · [API](#api) · [Security](#security)
 
 </div>
 
@@ -177,6 +177,30 @@ go run ./cmd/server -static client/dist -addr :3262
 | `-max-calls-per-session` | `8` | Max concurrent calls per session (`0` = unlimited) |
 
 ---
+
+## Coolify
+
+The image listens on **8080**, serves the built React client, and stores sessions in `/data/wacalls.db`.
+
+1. In Coolify, create a new resource from this Git repository and set the build pack to **Dockerfile** (the repo root `Dockerfile`).
+2. Set the exposed port to **8080**.
+3. Add a persistent volume mounted at **`/data`**. Without it, paired WhatsApp sessions are lost on every redeploy.
+4. Set the health check path to **`GET /api/health`** (this route stays open even when the API key is set).
+5. Environment variables:
+
+   | Variable | Required | Notes |
+   |---|---|---|
+   | `WACALLS_API_KEY` | yes | Bearer token for every `/api` route. The browser asks for it once. |
+   | `SENTRY_DSN` | no | Enables the Sentry Go SDK. |
+   | `SENTRY_ENVIRONMENT` | no | Defaults to empty. |
+   | `SENTRY_RELEASE` | no | Release name reported to Sentry. |
+
+   Do not set `VITE_API_URL` for this image. The client is built to call the same origin as the page.
+
+6. Attach a domain with **HTTPS**. Browsers only expose the microphone on a secure context (`https://` or `localhost`).
+7. Deploy. Open the domain, enter the API key, create a session, and scan the QR with **WhatsApp → Linked devices**.
+
+The browser talks to the server over HTTPS (API, SSE, and the WebRTC SDP exchange). Audio then flows on a WebRTC data channel, so the container must accept the UDP ports chosen by ICE. If calls pair but stay silent, publish the service on the host network (or map a UDP range) so those candidates are reachable from the browser. Signaling to WhatsApp also needs outbound internet from the container.
 
 ## API
 
