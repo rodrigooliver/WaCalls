@@ -21,10 +21,12 @@ import (
 )
 
 type Session struct {
-	id   string
-	name string
-	mgr  *SessionManager
-	log  *slog.Logger
+	id            string
+	name          string
+	webhookURL    string
+	webhookSecret string
+	mgr           *SessionManager
+	log           *slog.Logger
 
 	client *whatsmeow.Client
 	reg    *callRegistry
@@ -33,15 +35,17 @@ type Session struct {
 	auth AuthSnapshot
 }
 
-func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) *Session {
+func newSession(mgr *SessionManager, id, name, webhookURL, webhookSecret string, client *whatsmeow.Client) *Session {
 	s := &Session{
-		id:     id,
-		name:   name,
-		mgr:    mgr,
-		log:    mgr.log.With("session", id),
-		client: client,
-		auth:   AuthSnapshot{State: "connecting"},
-		reg:    newCallRegistry(),
+		id:            id,
+		name:          name,
+		webhookURL:    webhookURL,
+		webhookSecret: webhookSecret,
+		mgr:           mgr,
+		log:           mgr.log.With("session", id),
+		client:        client,
+		auth:          AuthSnapshot{State: "connecting"},
+		reg:           newCallRegistry(),
 	}
 	client.AddEventHandler(s.handleEvent)
 	return s

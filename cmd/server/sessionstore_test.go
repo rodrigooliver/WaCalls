@@ -25,7 +25,7 @@ func TestSessionStoreRoundtrip(t *testing.T) {
 	if len(id) != 32 {
 		t.Fatalf("session id should be 32 hex chars, got %d", len(id))
 	}
-	if err := st.insert(ctx, id, "Account A"); err != nil {
+	if err := st.insert(ctx, id, "Account A", "https://example.test/hook", "sek"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -33,7 +33,7 @@ func TestSessionStoreRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows) != 1 || rows[0].ID != id || rows[0].Name != "Account A" || rows[0].JID != "" {
+	if len(rows) != 1 || rows[0].ID != id || rows[0].Name != "Account A" || rows[0].JID != "" || rows[0].WebhookURL != "https://example.test/hook" || rows[0].WebhookSecret != "sek" {
 		t.Fatalf("unexpected rows after insert: %+v", rows)
 	}
 

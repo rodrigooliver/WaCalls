@@ -197,6 +197,9 @@ originating `sessionId`.
 | `DELETE` | `/api/sessions/{sid}/calls/{id}` | End an active call |
 | `GET` | `/api/sessions/{sid}/history` | Recent call history (up to 50 records) |
 | `GET` | `/api/events` | Server-sent events (sessions, auth, call lifecycle) |
+| `GET` | `/docs` | Swagger UI |
+
+Event payloads and webhooks are documented in [EVENTS.md](./EVENTS.md).
 
 ---
 

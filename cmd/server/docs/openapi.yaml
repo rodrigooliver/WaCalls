@@ -1,0 +1,528 @@
+openapi: 3.0.3
+info:
+  title: WaCalls API
+  version: "1.0.0"
+  description: |
+    HTTP API for WhatsApp voice sessions and 1:1 calls.
+    When `WACALLS_API_KEY` is set, every `/api/*` route except `GET /api/health`
+    requires the key as `Authorization: Bearer <key>`, `X-API-Key`, or `api_key` query.
+    Operators are identified by `X-Client-Id` (or `clientId` query).
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+  - apiKeyHeader: []
+tags:
+  - name: health
+  - name: sessions
+  - name: calls
+  - name: events
+paths:
+  /api/health:
+    get:
+      tags: [health]
+      security: []
+      summary: Liveness
+      responses:
+        "200":
+          description: Server is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /api/sessions:
+    get:
+      tags: [sessions]
+      summary: List sessions
+      responses:
+        "200":
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [sessions]
+      summary: Create a session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Display name. Defaults to "Session".
+                webhook_url:
+                  type: string
+                  description: |
+                    URL http(s) que recebe cada evento desta sessão. O corpo é o mesmo do SSE.
+                    Schemas: AuthStateEvent, SessionQREvent, IncomingEvent, IncomingClaimedEvent,
+                    CallStatusEvent, CallEndedEvent.
+                webhook_secret:
+                  type: string
+                  description: |
+                    HMAC-SHA256 key. When set, deliveries include `X-Wacalls-Signature: sha256=<hex>`
+                    over the raw body.
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/sessions/{sid}:
+    delete:
+      tags: [sessions]
+      summary: Delete a session
+      parameters:
+        - $ref: "#/components/parameters/sid"
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/sessions/{sid}/logout:
+    post:
+      tags: [sessions]
+      summary: Unpair the WhatsApp account
+      parameters:
+        - $ref: "#/components/parameters/sid"
+      responses:
+        "204":
+          description: Logged out
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/sessions/{sid}/pair:
+    post:
+      tags: [sessions]
+      summary: Start QR pairing
+      description: The QR payload is delivered over the SSE stream (`GET /api/events`).
+      parameters:
+        - $ref: "#/components/parameters/sid"
+      responses:
+        "204":
+          description: Pairing started
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/sessions/{sid}/history:
+    get:
+      tags: [sessions]
+      summary: Recent calls for a session
+      parameters:
+        - $ref: "#/components/parameters/sid"
+      responses:
+        "200":
+          description: Up to 50 recent rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Call"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/sessions/{sid}/calls:
+    post:
+      tags: [calls]
+      summary: Start an outgoing call
+      parameters:
+        - $ref: "#/components/parameters/sid"
+        - $ref: "#/components/parameters/clientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  description: E.164 digits or a WhatsApp JID.
+                duration_ms:
+                  type: integer
+                record:
+                  type: boolean
+      responses:
+        "200":
+          description: Call created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  call:
+                    type: object
+                    properties:
+                      callId:
+                        type: string
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "503":
+          $ref: "#/components/responses/Error"
+  /api/sessions/{sid}/calls/{id}/webrtc:
+    post:
+      tags: [calls]
+      summary: Exchange the browser SDP offer
+      parameters:
+        - $ref: "#/components/parameters/sid"
+        - $ref: "#/components/parameters/callId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sdp_offer]
+              properties:
+                sdp_offer:
+                  type: string
+      responses:
+        "200":
+          description: SDP answer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sdp_answer:
+                    type: string
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/sessions/{sid}/calls/{id}/accept:
+    post:
+      tags: [calls]
+      summary: Accept an incoming call
+      parameters:
+        - $ref: "#/components/parameters/sid"
+        - $ref: "#/components/parameters/callId"
+        - $ref: "#/components/parameters/clientId"
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  call:
+                    type: object
+                    properties:
+                      callId:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/sessions/{sid}/calls/{id}/reject:
+    post:
+      tags: [calls]
+      summary: Reject an incoming call
+      parameters:
+        - $ref: "#/components/parameters/sid"
+        - $ref: "#/components/parameters/callId"
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/sessions/{sid}/calls/{id}:
+    delete:
+      tags: [calls]
+      summary: End a call
+      parameters:
+        - $ref: "#/components/parameters/sid"
+        - $ref: "#/components/parameters/callId"
+      responses:
+        "204":
+          description: Ended
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/events:
+    get:
+      tags: [events]
+      summary: Server-sent events
+      description: |
+        Stream `text/event-stream`. Identifique o operador com `X-Client-Id` ou `clientId`.
+        Cada mensagem JSON tem `type`. O webhook da sessão recebe os mesmos corpos, exceto
+        `session-list` e `call-list`. Schemas em `components.schemas`.
+      parameters:
+        - $ref: "#/components/parameters/clientId"
+      responses:
+        "200":
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    apiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  parameters:
+    sid:
+      name: sid
+      in: path
+      required: true
+      schema:
+        type: string
+    callId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    clientId:
+      name: X-Client-Id
+      in: header
+      schema:
+        type: string
+      description: Operator id. Also accepted as the `clientId` query parameter.
+  responses:
+    Unauthorized:
+      description: Missing or wrong API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        jid:
+          type: string
+        state:
+          type: string
+        paired:
+          type: boolean
+    Call:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        callId:
+          type: string
+        owner:
+          type: string
+          nullable: true
+        direction:
+          type: string
+          enum: [inbound, outbound]
+        peer:
+          type: string
+        startedAt:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [starting, ringing, connected, ended]
+        endedAt:
+          type: integer
+          format: int64
+        endReason:
+          type: string
+    AuthStateEvent:
+      type: object
+      description: Mudança de conexão da sessão. `state` é connecting, qr, open ou logged_out.
+      properties:
+        type:
+          type: string
+          enum: [auth-state]
+        sessionId:
+          type: string
+        state:
+          type: string
+          enum: [connecting, qr, open, logged_out]
+        paired:
+          type: boolean
+        qr:
+          type: string
+          description: Presente quando state é qr.
+    SessionQREvent:
+      type: object
+      description: Novo código para parear a sessão.
+      properties:
+        type:
+          type: string
+          enum: [session-qr]
+        sessionId:
+          type: string
+        qr:
+          type: string
+    IncomingEvent:
+      type: object
+      description: Chamada recebida.
+      properties:
+        type:
+          type: string
+          enum: [incoming]
+        sessionId:
+          type: string
+        id:
+          type: string
+          description: ID da chamada.
+        peer:
+          type: string
+        offeredAt:
+          type: integer
+          format: int64
+    IncomingClaimedEvent:
+      type: object
+      description: Um operador aceitou a chamada recebida.
+      properties:
+        type:
+          type: string
+          enum: [incoming-claimed]
+        sessionId:
+          type: string
+        id:
+          type: string
+        owner:
+          type: string
+    CallStatusEvent:
+      type: object
+      description: Atualização de status da chamada.
+      properties:
+        type:
+          type: string
+          enum: [call-status]
+        sessionId:
+          type: string
+        id:
+          type: string
+        owner:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [starting, ringing, connected, ended]
+        peer:
+          type: string
+        startedAt:
+          type: integer
+          format: int64
+    CallEndedEvent:
+      type: object
+      description: Chamada encerrada.
+      properties:
+        type:
+          type: string
+          enum: [call-ended]
+        sessionId:
+          type: string
+        id:
+          type: string
+        owner:
+          type: string
+          nullable: true
+        reason:
+          type: string
+        endedAt:
+          type: integer
+          format: int64
+    SessionListEvent:
+      type: object
+      description: Só no SSE. Lista todas as sessões.
+      properties:
+        type:
+          type: string
+          enum: [session-list]
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+    CallListEvent:
+      type: object
+      description: Só no SSE. Lista as chamadas ativas de todas as sessões.
+      properties:
+        type:
+          type: string
+          enum: [call-list]
+        calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/Call"

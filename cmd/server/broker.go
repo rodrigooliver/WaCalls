@@ -54,6 +54,7 @@ type Broker struct {
 	history []CallRecord
 
 	SnapshotFn func() []any
+	Deliver    func(sessionID string, ev any)
 }
 
 func NewBroker() *Broker {
@@ -78,6 +79,13 @@ func (b *Broker) unsubscribe(s *subscriber) {
 	close(s.ch)
 }
 
+func (b *Broker) publish(sessionID string, ev any) {
+	b.broadcast(ev)
+	if b.Deliver != nil && sessionID != "" {
+		b.Deliver(sessionID, ev)
+	}
+}
+
 func (b *Broker) broadcast(ev any) {
 	data, err := json.Marshal(ev)
 	if err != nil {
@@ -94,7 +102,7 @@ func (b *Broker) broadcast(ev any) {
 }
 
 func (b *Broker) emitAuthState(sessionID string, a AuthSnapshot) {
-	b.broadcast(map[string]any{
+	b.publish(sessionID, map[string]any{
 		"type": "auth-state", "sessionId": sessionID,
 		"paired": a.Paired, "state": a.State, "qr": a.QR,
 	})
@@ -105,7 +113,7 @@ func (b *Broker) emitSessionList(sessions []SessionInfo) {
 }
 
 func (b *Broker) emitSessionQR(sessionID, qr string) {
-	b.broadcast(map[string]any{"type": "session-qr", "sessionId": sessionID, "qr": qr})
+	b.publish(sessionID, map[string]any{"type": "session-qr", "sessionId": sessionID, "qr": qr})
 }
 
 func (b *Broker) upsertCall(r CallRecord) {
@@ -114,7 +122,7 @@ func (b *Broker) upsertCall(r CallRecord) {
 	b.calls[r.CallID] = &cp
 	b.mu.Unlock()
 	b.broadcastCallList()
-	b.broadcast(map[string]any{
+	b.publish(r.SessionID, map[string]any{
 		"type": "call-status", "sessionId": r.SessionID, "id": r.CallID, "owner": r.Owner,
 		"status": r.Status, "peer": r.Peer, "startedAt": r.StartedAt,
 	})
@@ -177,7 +185,7 @@ func (b *Broker) endCall(id, reason string) {
 	sessionID := c.SessionID
 	b.mu.Unlock()
 
-	b.broadcast(map[string]any{
+	b.publish(sessionID, map[string]any{
 		"type": "call-ended", "sessionId": sessionID, "id": id, "owner": owner, "reason": reason, "endedAt": now,
 	})
 	b.broadcastCallList()
@@ -194,13 +202,13 @@ func (b *Broker) broadcastCallList() {
 }
 
 func (b *Broker) emitIncoming(sessionID, id, peer string) {
-	b.broadcast(map[string]any{
+	b.publish(sessionID, map[string]any{
 		"type": "incoming", "sessionId": sessionID, "id": id, "peer": peer, "offeredAt": time.Now().UnixMilli(),
 	})
 }
 
 func (b *Broker) emitIncomingClaimed(sessionID, id, owner string) {
-	b.broadcast(map[string]any{"type": "incoming-claimed", "sessionId": sessionID, "id": id, "owner": owner})
+	b.publish(sessionID, map[string]any{"type": "incoming-claimed", "sessionId": sessionID, "id": id, "owner": owner})
 }
 
 func (b *Broker) historyRows(sessionID string, limit int) []CallRecord {

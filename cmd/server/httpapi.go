@@ -35,6 +35,7 @@ func (s *server) routes() http.Handler {
 	protected := withAPIKey(os.Getenv("WACALLS_API_KEY"), mux)
 	root := http.NewServeMux()
 	root.HandleFunc("GET /api/health", handleHealth)
+	mountDocs(root)
 	root.Handle("/api/", protected)
 
 	if s.staticDir != "" {
@@ -94,14 +95,21 @@ func (s *server) handleSessionList(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name string `json:"name"`
+		Name          string `json:"name"`
+		WebhookURL    string `json:"webhook_url"`
+		WebhookSecret string `json:"webhook_secret"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
 		name = "Session"
 	}
-	id, err := s.sessions.Create(name)
+	webhookURL := strings.TrimSpace(body.WebhookURL)
+	if webhookURL != "" && !strings.HasPrefix(webhookURL, "https://") && !strings.HasPrefix(webhookURL, "http://") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "webhook_url must be http or https"})
+		return
+	}
+	id, err := s.sessions.Create(name, webhookURL, body.WebhookSecret)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

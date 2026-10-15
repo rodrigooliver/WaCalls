@@ -49,6 +49,7 @@ func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, log 
 	broker := NewBroker()
 	mgr := newSessionManager(ctx, container, broker, store, waLogger, log, maxCalls)
 	broker.SnapshotFn = mgr.snapshotEvents
+	broker.Deliver = mgr.deliverWebhook
 
 	return &server{broker: broker, sessions: mgr, log: log, staticDir: staticDir}, nil
 }
