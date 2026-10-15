@@ -1,3 +1,5 @@
+import { apiUrl } from "@/lib/api";
+import { getApiKey } from "@/lib/api-key";
 import type { CallStatus } from "@/types/call";
 import type { SessionInfo, SessionState } from "@/types/session";
 
@@ -31,7 +33,9 @@ class EventStream {
 
   connect(clientId: string): void {
     if (this.#es) return;
-    this.#es = new EventSource(`/api/events?clientId=${encodeURIComponent(clientId)}`);
+    const key = getApiKey();
+    const auth = key ? `&api_key=${encodeURIComponent(key)}` : "";
+    this.#es = new EventSource(apiUrl(`/api/events?clientId=${encodeURIComponent(clientId)}${auth}`));
     this.#es.onmessage = (ev) => {
       try {
         const parsed: BrokerEvent = JSON.parse(ev.data);

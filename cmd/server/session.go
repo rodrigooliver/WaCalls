@@ -98,8 +98,10 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 
 func (s *Session) startOutgoing(ctx context.Context, peer types.JID, isVideo bool) (string, error) {
 	callID := signaling.GenerateCallID()
+	s.log.Info("outgoing call", "session", s.id, "call_id", callID, "peer", peer.String(), "video", isVideo)
 	cm := s.createCall(callID)
 	if err := cm.StartCall(ctx, callID, peer, isVideo); err != nil {
+		s.log.Error("outgoing call aborted", "session", s.id, "call_id", callID, "err", err)
 		s.removeCall(callID)
 		return "", err
 	}

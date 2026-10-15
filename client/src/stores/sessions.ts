@@ -20,10 +20,14 @@ const pickActive = (sessions: SessionInfo[], current: string | null): string | n
 };
 
 let wired = false;
+export const resetSessionsWire = (): void => {
+  eventStream.close();
+};
+
 export const ensureSessionsWired = (): void => {
+  eventStream.connect(getClientId());
   if (wired) return;
   wired = true;
-  eventStream.connect(getClientId());
 
   void listSessions()
     .then((sessions) => useSessions.setState((s) => ({ sessions, activeId: pickActive(sessions, s.activeId) })))

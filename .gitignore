@@ -28,6 +28,7 @@ coverage.*
 *.pcapng
 *.keys
 nc-qr.txt
+.env
 .DS_Store
 Thumbs.db
 .idea/

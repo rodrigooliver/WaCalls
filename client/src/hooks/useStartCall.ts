@@ -16,6 +16,7 @@ export const useStartCall = (sid: string, micId: string | null) =>
       const m = e.message;
       if (m.includes("429")) toast.error("Limit reached: max concurrent calls.");
       else if (m.includes("503")) toast.error("WhatsApp not paired.");
+      else if (m.includes("not on WhatsApp") || m.includes(" 404 ")) toast.error("Este número não está no WhatsApp.");
       else toast.error(m);
     },
   });

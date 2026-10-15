@@ -10,10 +10,16 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	addr := flag.String("addr", ":8080", "HTTP listen address")
+	_ = godotenv.Load()
+
+	addr := flag.String("addr", ":3262", "HTTP listen address")
 	dbPath := flag.String("db", "wacalls.db", "SQLite session database path")
 	staticDir := flag.String("static", "client/dist", "static client directory (optional)")
 	debug := flag.Bool("debug", false, "verbose logging")
@@ -26,6 +32,13 @@ func main() {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(log)
+
+	flushSentry := initSentry(log)
+	defer flushSentry()
+
+	if os.Getenv("WACALLS_API_KEY") == "" {
+		log.Warn("WACALLS_API_KEY is empty; /api routes are open")
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -42,7 +55,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpSrv := &http.Server{Addr: *addr, Handler: srv.routes()}
+	handler := srv.routes()
+	if sentry.CurrentHub().Client() != nil {
+		handler = sentryhttp.New(sentryhttp.Options{Repanic: true}).Handle(handler)
+	}
+	httpSrv := &http.Server{Addr: *addr, Handler: handler}
 	go func() {
 		log.Info("HTTP server listening", "addr", *addr)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

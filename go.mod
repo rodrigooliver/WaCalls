@@ -3,6 +3,8 @@ module wacalls
 go 1.26.4
 
 require (
+	github.com/getsentry/sentry-go v0.35.1
+	github.com/joho/godotenv v1.5.1
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/pion/webrtc/v4 v4.2.15
 	github.com/rs/zerolog v1.35.1

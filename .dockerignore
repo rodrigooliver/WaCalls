@@ -1,0 +1,14 @@
+.git
+.github
+wacalls.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+client/node_modules
+client/dist
+data
+auth
+*.exe
+*.test
+.DS_Store

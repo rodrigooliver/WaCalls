@@ -91,7 +91,13 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	if creator.IsEmpty() {
 		creator = m.sock.OwnPN()
 	}
-	resolved := m.sock.ResolveLIDForPN(ctx, peerJid)
+	m.log.Info("resolving peer", "call_id", callID, "peer", peerJid.String(), "creator", creator.String(), "video", isVideo)
+	resolved, err := m.sock.ResolveLIDForPN(ctx, peerJid)
+	if err != nil {
+		m.mu.Unlock()
+		return err
+	}
+	m.log.Info("peer resolved", "call_id", callID, "resolved", resolved.String())
 
 	call := NewOutgoingCall(callID, resolved.String(), creator.String(), mediaType)
 	callKey := media.GenerateCallKey()
@@ -109,10 +115,13 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 
 	offer, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved, isVideo)
 	if err != nil {
+		m.log.Error("build offer failed", "call_id", callID, "peer", resolved.String(), "err", err)
 		return err
 	}
+	m.log.Info("sending call offer", "call_id", callID, "peer", resolved.String())
 	ackNode, err := m.sock.Query(ctx, offer)
 	if err != nil {
+		m.log.Error("call offer query failed", "call_id", callID, "peer", resolved.String(), "err", err)
 		return err
 	}
 

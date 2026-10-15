@@ -2,12 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"wacalls/internal/voip/core"
+	"wacalls/internal/wa"
 
 	"go.mau.fi/whatsmeow/types"
 )
@@ -29,18 +32,27 @@ func (s *server) routes() http.Handler {
 
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 
+	protected := withAPIKey(os.Getenv("WACALLS_API_KEY"), mux)
+	root := http.NewServeMux()
+	root.HandleFunc("GET /api/health", handleHealth)
+	root.Handle("/api/", protected)
+
 	if s.staticDir != "" {
 		if _, err := os.Stat(s.staticDir); err == nil {
-			mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
+			root.Handle("/", http.FileServer(http.Dir(s.staticDir)))
 		}
 	}
-	return withCORS(mux)
+	return withCORS(root)
+}
+
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func withCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Client-Id")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Client-Id, Authorization, X-API-Key")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -180,17 +192,28 @@ func (s *server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "max concurrent calls"})
 		return
 	}
-	peer := types.NewJID(normalizePhone(body.Phone), types.DefaultUserServer)
+	peer, err := peerJID(body.Phone)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.log.Info("start call", "session", sess.id, "peer", peer.String(), "owner", owner, "duration_ms", body.DurationMs, "record", body.Record)
 
 	callID, err := sess.startOutgoing(r.Context(), peer, false)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.log.Error("start call failed", "session", sess.id, "peer", peer.String(), "err", err)
+		status := http.StatusInternalServerError
+		if errors.Is(err, wa.ErrNotOnWhatsApp) {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 	s.broker.upsertCall(CallRecord{
 		SessionID: sess.id, CallID: callID, Owner: &owner, Direction: "outbound", Peer: peer.String(),
 		StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
 	})
+	s.log.Info("start call accepted", "session", sess.id, "call_id", callID, "peer", peer.String())
 	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": callID}})
 }
 
@@ -266,6 +289,34 @@ func (s *server) doEndCall(sess *Session, w http.ResponseWriter, r *http.Request
 	sess.removeCall(id)
 	s.broker.endCall(id, string(core.EndCallReasonUserEnded))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func peerJID(raw string) (types.JID, error) {
+	raw = strings.TrimSpace(raw)
+	if strings.Contains(raw, "@") {
+		jid, err := types.ParseJID(raw)
+		if err != nil {
+			return types.JID{}, fmt.Errorf("invalid jid")
+		}
+		jid = jid.ToNonAD()
+		switch jid.Server {
+		case types.DefaultUserServer, types.HiddenUserServer:
+		default:
+			return types.JID{}, fmt.Errorf("unsupported jid server")
+		}
+		if jid.Server == types.HiddenUserServer && jid.User == "1099511693312" {
+			return types.JID{}, fmt.Errorf("placeholder lid")
+		}
+		if jid.User == "" {
+			return types.JID{}, fmt.Errorf("invalid jid")
+		}
+		return jid, nil
+	}
+	digits := normalizePhone(raw)
+	if digits == "" {
+		return types.JID{}, fmt.Errorf("phone required")
+	}
+	return types.NewJID(digits, types.DefaultUserServer), nil
 }
 
 func normalizePhone(p string) string {

@@ -142,13 +142,13 @@ cd client && npm install && cd ..
 ### Run
 
 ```bash
-go run ./cmd/server -addr :8080          # add -debug for verbose logs
+go run ./cmd/server                       # API on :3262; add -debug for verbose logs
 ```
 
 Live audio works out of the box — the MLow codec is pure Go, so a plain build
 includes it. No build tags, no `CGO_ENABLED`, no DLLs.
 
-Open `http://localhost:8080`, click **New session**, and scan the QR shown in the browser
+Open `http://localhost:3260` (Vite) with the API on `:3262`, click **New session**, and scan the QR shown in the browser
 (it is also printed in the terminal) with **WhatsApp → Linked devices**. Add more accounts
 the same way and switch between them in the sidebar.
 
@@ -156,21 +156,21 @@ the same way and switch between them in the sidebar.
 
 ```bash
 cd client
-npm run dev      # Vite on :5173, proxies /api → http://localhost:8080
+npm run dev      # Vite on :3260; API calls go to VITE_API_URL (http://127.0.0.1:3262)
 ```
 
 For production, build the static client and serve it from the Go server:
 
 ```bash
 cd client && npm run build && cd ..
-go run ./cmd/server -static client/dist -addr :8080
+go run ./cmd/server -static client/dist -addr :3262
 ```
 
 ### Server flags
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-addr` | `:8080` | HTTP listen address |
+| `-addr` | `:3262` | HTTP listen address |
 | `-db` | `wacalls.db` | SQLite session database path |
 | `-static` | `client/dist` | Static client directory (optional) |
 | `-debug` | `false` | Verbose logging (includes whatsmeow's internal log) |
@@ -211,9 +211,13 @@ cd client && npm run build    # client type-check + production build
 
 ## Security
 
-The API has **no authentication** — anyone with HTTP access can create accounts, place
-calls, and read history. **Run it only on a trusted LAN.** `wacalls.db` holds WhatsApp
-session credentials (secrets): **do not commit it** and keep it protected.
+Set `WACALLS_API_KEY` in production. Every `/api` route then requires
+`Authorization: Bearer <key>`, `X-API-Key`, or `?api_key=` (used by the SSE stream).
+`GET /api/health` stays open for the platform health check. With the variable empty,
+the API stays open for local use. The browser asks for the key once and stores it in
+`localStorage`. `wacalls.db` holds WhatsApp session credentials: **do not commit it**.
+
+`SENTRY_DSN` enables the Sentry Go SDK (optional `SENTRY_ENVIRONMENT` and `SENTRY_RELEASE`).
 
 ---
 

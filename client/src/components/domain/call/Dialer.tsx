@@ -32,8 +32,7 @@ export const Dialer = ({ sid }: { sid: string }) => {
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
-            placeholder="+55 11 99999 9999"
-            inputMode="tel"
+            placeholder="+55 11 99999 9999 ou 186835489816660@lid"
             className="min-w-[200px] flex-1"
           />
           <Button
