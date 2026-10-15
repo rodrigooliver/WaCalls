@@ -2,3 +2,4 @@ node_modules
 dist
 *.tsbuildinfo
 .vite
+vite.config.d.ts
